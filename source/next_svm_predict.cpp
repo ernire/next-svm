@@ -4,8 +4,7 @@
 
 #include <iostream>
 #include <fstream>
-#include "hpc_svm_predict.h"
-
+#include "next_svm_predict.h"
 
 int get_read_size(const int total_samples, const int total_readers, const int rank) {
     int part = (total_samples / total_readers);
@@ -17,12 +16,12 @@ int get_read_size(const int total_samples, const int total_readers, const int ra
     return part;
 }
 
-Next_SVM_Data load_samples(std::istream &is, const int total_readers, const int rank) {
+next_svm_data load_samples(std::istream &is, const int total_readers, const int rank) {
     int max_features, total_samples;
 
     is.read((char*)&total_samples,sizeof(int));
     is.read((char*)&max_features,sizeof(int));
-    auto* data_svm = new Next_SVM_Data(total_samples, max_features);
+    auto* data_svm = new next(total_samples, max_features);
 
     std::cout << "Total samples: " << total_samples << std::endl;
     std::cout << "Features per sample: " << max_features << std::endl;

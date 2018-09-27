@@ -7,12 +7,15 @@
 #include <fstream>
 #include "next_svm_io.h"
 
+// Single thread assumed
 void parse_svm_light_data(std::istream &is, const std::function<void(int, int, float*)> &sample_callback) {
     std::string line;
     int c, i, m = 0;
     float f;
     float sample_features[512];
 
+    is.clear();
+    is.seekg (0, std::istream::beg);
     while (std::getline(is, line)) {
         memset(sample_features, 0, sizeof(sample_features));
         std::istringstream iss(line);
@@ -44,19 +47,17 @@ std::streampos get_file_size(const char *filePath){
     return fsize;
 }
 
-
-
-void convert_light_to_bin(std::istream &is, std::ostream &os, const std::function<void(int, int, int)> &meta_callback) {
+bool convert_light_to_bin(char* in_file, char* out_file, const std::function<void(int, int, int)> &meta_callback) {
     std::vector<float *> features;
     std::vector<int> classes;
     int max_features = 0;
     int total_samples = 0;
     int zero_features = 0;
-
-//    std::ifstream infile(in_file, std::ios::in | std::ifstream::binary);
-//    std::ofstream outfile(out_file, std::ios::in | std::ofstream::binary);
-//    if (infile.is_open() && outfile.is_open()) {
-
+    std::ifstream is(in_file, std::ios::in | std::ifstream::binary);
+    std::ofstream os(out_file, std::ios::in | std::ofstream::binary);
+    if (!is.is_open() || !os.is_open()) {
+        return false;
+    }
     parse_svm_light_data(is, [&max_features](int m, int c, float* f) ->
     void {
         if (m > max_features) max_features = m;
@@ -71,7 +72,6 @@ void convert_light_to_bin(std::istream &is, std::ostream &os, const std::functio
     });
     // callback the number of features and the data sparsity
     meta_callback(total_samples, max_features, zero_features);
-
     os.write(reinterpret_cast<const char *>(&total_samples), sizeof(int));
     os.write(reinterpret_cast<const char *>(&max_features), sizeof(int));
     parse_svm_light_data(is, [max_features, &os](int m, int c, const float* f) ->
@@ -84,10 +84,7 @@ void convert_light_to_bin(std::istream &is, std::ostream &os, const std::functio
         os << std::endl;
     });
     os.flush();
-//        outfile.flush();
-//        outfile.close();
-//        infile.close();
-//    } else {
-//        std::cout << "Unable to open input or output files: " << in_file << ", " << out_file << std::endl;
-//    }
+    os.close();
+    is.close();
+    return true;
 }

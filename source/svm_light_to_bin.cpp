@@ -18,22 +18,18 @@ int main(int argc, char** argv) {
         char* in_file = argv[1];
         char* out_file = argv[2];
         std::cout << "Parsing file size: " << get_file_size(in_file) << std::endl;
-        std::ifstream infile(in_file, std::ios::in | std::ifstream::binary);
-        std::ofstream outfile(out_file, std::ios::in | std::ofstream::binary);
-        infile.clear();
-        infile.seekg (0, std::istream::beg);
-        if (infile.is_open() && outfile.is_open()) {
-            convert_light_to_bin(infile, outfile, [](int total_samples, int no_of_features, int zero_features) ->
+//        std::ifstream infile(in_file, std::ios::in | std::ifstream::binary);
+//        std::ofstream outfile(out_file, std::ios::in | std::ofstream::binary);
+//        if (infile.is_open() && outfile.is_open()) {
+        if (!convert_light_to_bin(in_file, out_file, [](int total_samples, int no_of_features, int zero_features) ->
             void {
                 double sparsity = ((double)zero_features / (double)(total_samples * no_of_features));
                 std::cout << "Number of samples: " << total_samples << std::endl;
                 std::cout << "Number of features: " << no_of_features << std::endl;
                 std::cout << "Total Empty features: " << zero_features << std::endl;
-                std::cout << "Sparsity ratio: " << std::fixed << std::setprecision(4) << sparsity << std::endl;
-            });
-            infile.close();
-            outfile.close();
-        } else {
+                std::cout << "Sparsity ratio: " << std::fixed << std::setprecision(4) << sparsity*100 << "%"
+                    << std::endl;
+            })) {
             std::cout << "Unable to open input or output files: " << in_file << ", " << out_file << std::endl;
         }
     } else {
