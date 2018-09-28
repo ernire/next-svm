@@ -9,19 +9,25 @@
 #include <istream>
 #include <functional>
 
+const int BUFFER_SAMPLE_SIZE = 1000;
+
 class next_svm_data {
 private:
-    const int number_of_parts;
-    const int part_index;
-    int number_of_samples;
-    int number_of_features;
-    int get_part_offset();
-    int get_part_offset(int part_index);
-    int get_part_size(int part_index);
+    const int number_of_blocks;
+    const int block_index;
+    const char* in_file;
+    int number_of_samples = 0;
+    int number_of_features = 0;
+    int current_offset = 0;
+    char* in_buffer;
+    int* classes;
+    float* features;
+    void init_meta_data(std::istream &is);
 public:
-    next_svm_data(int number_of_parts, int part_index);
-    bool load_data(std::istream &is);
-    int get_part_size();
+    next_svm_data(char* in_file, int number_of_blocks, int block_index);
+    bool read_next_samples(int max_samples, const std::function<void(int*, float**, int, int)> &read_callback);
+//    bool load_data(std::istream &is);
+//    int get_part_size();
 };
 
 std::streampos get_file_size(const char *filePath);

@@ -2,14 +2,15 @@
 // Created by Ernir Erlingsson on 26.9.2018.
 //
 
+/*
 #include "next_svm_data.h"
 
 int next_svm_data::get_part_size() {
-    return get_part_size(part_index);
+    return get_part_size(block_index);
 }
 
-next_svm_data::next_svm_data(int number_of_parts, int part_index) :
-number_of_parts(number_of_parts), part_index(part_index) {
+next_svm_data::next_svm_data(int number_of_blocks, int block_index) :
+number_of_blocks(number_of_blocks), block_index(block_index) {
 
 }
 
@@ -29,12 +30,12 @@ bool next_svm_data::load_data(std::istream &is) {
 }
 
 int next_svm_data::get_part_offset() {
-    return get_part_offset(part_index);
+    return get_part_offset(block_index);
 }
 
 int next_svm_data::get_part_size(const int index) {
-    int part = (number_of_samples / number_of_parts);
-    int reserve = number_of_samples % number_of_parts;
+    int part = (number_of_samples / number_of_blocks);
+    int reserve = number_of_samples % number_of_blocks;
     // Some processes will need one more sample if the data size does not fit completely with the number of processes
     if (reserve > 0 && reserve < index-1) {
         return part + 1;
@@ -49,4 +50,4 @@ int next_svm_data::get_part_offset(int index) {
     }
     return offset;
 }
-
+*/
