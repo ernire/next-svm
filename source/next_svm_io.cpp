@@ -11,7 +11,7 @@ int get_part_size(const int part_index, const int number_of_samples, const int n
     int part = (number_of_samples / number_of_parts);
     int reserve = number_of_samples % number_of_parts;
     // Some processes will need one more sample if the data size does not fit completely with the number of processes
-    if (reserve > 0 && reserve < part_index-1) {
+    if (reserve > 0 && reserve < part_index - 1) {
         return part + 1;
     }
     return part;
@@ -108,13 +108,6 @@ bool convert_light_to_bin(char *in_file, char *out_file, const std::function<voi
 }
 
 
-
-
-
-
-
-
-
 /*
  * unsigned int count5(std::istream &infile, char c) {
     static char buffer[8192];
@@ -127,36 +120,65 @@ bool convert_light_to_bin(char *in_file, char *out_file, const std::function<voi
 }
  */
 
-next_svm_data::next_svm_data(char *in_file, int number_of_blocks, int block_index) : in_file(in_file),
-                                                                                   number_of_blocks(number_of_blocks),
-                                                                                   block_index(block_index) {
+next_svm_data::next_svm_data(char *in_file, int number_of_blocks, int block_index)
+        : in_file(in_file),
+          number_of_blocks(number_of_blocks),
+          block_index(block_index) {
 }
 
+
+//next_svm_data::next_svm_data(char *in_file, int number_of_blocks, int block_index, int sample_size)
+//        : in_file(in_file),
+//          number_of_blocks(number_of_blocks),
+//          block_index(block_index),
+//          buffer_sample_size(sample_size) {
+//
+//}
+
 void next_svm_data::init_meta_data(std::istream &is) {
-    is.read((char*)&number_of_samples,sizeof(int));
-    is.read((char*)&number_of_features,sizeof(int));
-    // calculate this parts data offset
-    current_offset = get_block_start_offset(block_index, number_of_samples, number_of_blocks) + 2* sizeof(int);
-    // input buffer can hold BUFFER_SAMPLE_SIZE samples
-    in_buffer = new char[BUFFER_SAMPLE_SIZE*(number_of_features* sizeof(float) + sizeof(int))];
+    is.read((char *) &number_of_samples, sizeof(int));
+    is.read((char *) &number_of_features, sizeof(int));
+    // calculate this parts data offsets
+//    current_offset = get_block_start_offset(block_index, number_of_samples, number_of_blocks) + 2 * sizeof(int);
+    int block_start_offset = get_block_start_offset(block_index, number_of_samples, number_of_blocks);
+    class_offset = (block_start_offset + 2) * sizeof(int);
+    feature_offset = (number_of_samples+2) * sizeof(int) + block_start_offset * sizeof(float);
+//    char* in_buffer; = new char[buffer_sample_size * (number_of_features * sizeof(float))];
 }
 
 bool
-next_svm_data::read_next_samples(int max_samples, const std::function<void(int *, float **, int, int)> &read_callback) {
+next_svm_data::read_next_samples(int max_samples, const std::function<void(int*, float**, int, int)> &read_callback) {
     std::ifstream ifs(in_file, std::ios::in | std::ifstream::binary);
-    if (current_offset == 0) {
+    if (class_offset == -1) {
         init_meta_data(ifs);
     }
-    auto* data = new float[max_samples];
+    auto *features = new float[max_samples];
+    auto *classes = new int[max_samples];
+    char* in_buffer = new char[max_samples * (number_of_features * sizeof(float))];
     unsigned int read_count = 0;
-    ifs.seekg(current_offset, std::istream::beg);
-    if (ifs.read(in_buffer, sizeof(in_buffer))) {
-        read_count += ifs.gcount();
+    // read the classifications
+    ifs.seekg(class_offset, std::istream::beg);
+    if (!ifs.read(in_buffer, std::min(sizeof(in_buffer), max_samples* sizeof(int)))) {
+        return false;
+    }
+    class_offset += ifs.gcount();
+    read_count += ifs.gcount();
+    // read the features
+    ifs.seekg(feature_offset, std::istream::beg);
+    if (!ifs.read(in_buffer, std::min(sizeof(in_buffer), max_samples*number_of_features* sizeof(float)))) {
+        return false;
+    }
+    feature_offset += ifs.gcount();
+    read_count += ifs.gcount();
+
+
+
+    ifs.close();
+    delete[] features;
+    delete[] classes;
+    return true;
+}
+
 //        double a[9] = { 1, 2, 3, 4, 5, 6, 7, 8, 9};
 //        double (*b)[3] = reinterpret_cast<double (*)[3]>(a);
 //        memcpy(data, in_buffer, static_cast<size_t>(ifs.gcount()));
-    }
-    ifs.close();
-    delete [] data;
-    return 0;
-}
