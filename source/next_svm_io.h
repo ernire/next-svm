@@ -16,7 +16,6 @@ private:
     const int number_of_blocks;
     const int block_index;
     const char* in_file;
-//    const int buffer_sample_size;
     int number_of_samples = 0;
     int number_of_features = 0;
     int class_offset = -1;
@@ -26,12 +25,8 @@ private:
     void init_meta_data(std::istream &is);
 public:
     next_svm_data(char* in_file, int number_of_blocks, int block_index);
-//    next_svm_data(char* in_file, int number_of_blocks, int block_index, int sample_size);
     bool read_next_samples(int max_samples, const std::function<void(int*, float**, int, int)> &read_callback);
-//    bool load_data(std::istream &is);
-//    int get_part_size();
 };
-
 std::streampos get_file_size(const char *filePath);
 bool convert_light_to_bin(char* in_file, char* out_file, const std::function<void(int, int, int)> &meta_callback);
 

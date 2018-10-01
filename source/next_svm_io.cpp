@@ -5,6 +5,7 @@
 #include <cstring>
 #include <sstream>
 #include <fstream>
+#include <iostream>
 #include "next_svm_io.h"
 
 int get_part_size(const int part_index, const int number_of_samples, const int number_of_parts) {
@@ -72,7 +73,7 @@ bool convert_light_to_bin(char *in_file, char *out_file, const std::function<voi
     int total_samples = 0;
     int zero_features = 0;
     std::ifstream is(in_file, std::ios::in | std::ifstream::binary);
-    std::ofstream os(out_file, std::ios::in | std::ofstream::binary);
+    std::ofstream os(out_file, std::ios::out | std::ofstream::binary);
     if (!is.is_open() || !os.is_open()) {
         return false;
     }
@@ -92,12 +93,9 @@ bool convert_light_to_bin(char *in_file, char *out_file, const std::function<voi
     os.write(reinterpret_cast<const char *>(&max_features), sizeof(int));
     parse_svm_light_data(is, [max_features, &os](int m, int c, const float *f) -> void {
         os.write(reinterpret_cast<const char *>(&c), sizeof(int));
-        for (int i = 0; i < max_features; i++) {
-            os.write(reinterpret_cast<const char *>(&f[i]), sizeof(float));
-        }
     });
     parse_svm_light_data(is, [max_features, &os](int m, int c, const float *f) -> void {
-        for (int i = 0; i < max_features; i++) {
+        for (int i = 0; i <= max_features; i++) {
             os.write(reinterpret_cast<const char *>(&f[i]), sizeof(float));
         }
     });

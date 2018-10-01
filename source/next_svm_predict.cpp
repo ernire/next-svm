@@ -5,6 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include "next_svm_predict.h"
+#include "next_svm_io.h"
 
 int get_read_size(const int total_samples, const int total_readers, const int rank) {
     int part = (total_samples / total_readers);
@@ -21,6 +22,8 @@ next_svm_data load_samples(std::istream &is, const int total_readers, const int 
 
     is.read((char*)&total_samples,sizeof(int));
     is.read((char*)&max_features,sizeof(int));
+
+    /*
     auto* data_svm = new next(total_samples, max_features);
 
     std::cout << "Total samples: " << total_samples << std::endl;
@@ -34,6 +37,7 @@ next_svm_data load_samples(std::istream &is, const int total_readers, const int 
     for (int i = 0; i < total_samples; i++) {
 
     }
+     */
 }
 
 int main(int argc, char** argv) {
