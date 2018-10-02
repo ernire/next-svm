@@ -11,12 +11,7 @@
 #include <iomanip>
 #include <cmath>
 #include "next_svm_io.h"
-
-void do_unit_test(char *string, const std::function<bool()> &test_case) {
-    std::cout << std::left << std::setfill('.') << std::setw (50) << string;
-    test_case() ? std::cout << "PASSED" : std::cout << "FAILED";
-    std::cout << std::endl;
-}
+#include "test_util.h"
 
 void perform_unit_tests() {
     std::cout << "***Unit Test Suite of NextSVM IO***" << std::endl;

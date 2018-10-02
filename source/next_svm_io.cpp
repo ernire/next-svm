@@ -118,10 +118,11 @@ bool convert_light_to_bin(char *in_file, char *out_file, const std::function<voi
 }
  */
 
-next_svm_data::next_svm_data(char *in_file, int number_of_blocks, int block_index)
+next_svm_data::next_svm_data(char *in_file, int number_of_blocks, int block_index, int max_samples_per_batch)
         : in_file(in_file),
           number_of_blocks(number_of_blocks),
-          block_index(block_index) {
+          block_index(block_index),
+          max_samples_per_batch(max_samples_per_batch) {
 }
 
 
@@ -134,47 +135,91 @@ next_svm_data::next_svm_data(char *in_file, int number_of_blocks, int block_inde
 //}
 
 void next_svm_data::init_meta_data(std::istream &is) {
-    is.read((char *) &number_of_samples, sizeof(int));
-    is.read((char *) &number_of_features, sizeof(int));
+    is.read((char *) &total_number_of_samples, sizeof(int));
+    is.read((char *) &total_number_of_features, sizeof(int));
     // calculate this parts data offsets
-//    current_offset = get_block_start_offset(block_index, number_of_samples, number_of_blocks) + 2 * sizeof(int);
-    int block_start_offset = get_block_start_offset(block_index, number_of_samples, number_of_blocks);
+//    current_offset = get_block_start_offset(block_index, total_number_of_samples, number_of_blocks) + 2 * sizeof(int);
+    remaining_samples = get_part_size(block_index, total_number_of_samples, number_of_blocks);
+    int block_start_offset = get_block_start_offset(block_index, total_number_of_samples, number_of_blocks);
     class_offset = (block_start_offset + 2) * sizeof(int);
-    feature_offset = (number_of_samples+2) * sizeof(int) + block_start_offset * sizeof(float);
-//    char* in_buffer; = new char[buffer_sample_size * (number_of_features * sizeof(float))];
+    feature_offset = (total_number_of_samples + 2) * sizeof(int) + block_start_offset * sizeof(float);
+//    char* in_buffer; = new char[buffer_sample_size * (total_number_of_features * sizeof(float))];
 }
 
-bool
-next_svm_data::read_next_samples(int max_samples, const std::function<void(int*, float**, int, int)> &read_callback) {
+// Returns number of read samples
+int next_svm_data::read_next_samples() {
     std::ifstream ifs(in_file, std::ios::in | std::ifstream::binary);
     if (class_offset == -1) {
         init_meta_data(ifs);
+    } else {
+        delete[] classes;
+        delete[] features;
     }
-    auto *features = new float[max_samples];
-    auto *classes = new int[max_samples];
-    char* in_buffer = new char[max_samples * (number_of_features * sizeof(float))];
+    int buffer_samples = std::min(max_samples_per_batch, remaining_samples);
+
+    std::cout << "buffer samples: " << class_offset << std::endl;
+    std::cout << "buffer samples: " << feature_offset << std::endl;
+//    int int_read_size = buffer_samples * sizeof(int);
+//    int float_read_size = buffer_samples * sizeof(float);
+    features = new float[buffer_samples];
+    classes = new int[buffer_samples];
+//    char *int_buffer = new char[int_read_size];
+//    char *float_buffer = new char[float_read_size];
     unsigned int read_count = 0;
     // read the classifications
     ifs.seekg(class_offset, std::istream::beg);
-    if (!ifs.read(in_buffer, std::min(sizeof(in_buffer), max_samples* sizeof(int)))) {
-        return false;
+//    if (!ifs.read(int_buffer, int_read_size)) {
+//    int* test = new int[buffer_samples];
+
+    if (!ifs.read((char *) classes, buffer_samples * sizeof(int))) {
+        return -1;
     }
+//    for (int i = 0; i <= buffer_samples; i++) {
+//        ifs.read(reinterpret_cast<char*> (&test), sizeof(int));
+//        ifs.read(reinterpret_cast<char*> (&test), sizeof(int));
+//    }
+
+
+
+//    if (!ifs.read(reinterpret_cast<char*> (classes), int_read_size)) {
+//        return -1;
+//    }
+
+//    std::copy(int_buffer, int_buffer + ifs.gcount(), classes);
+//    for (int i = 0; i < int_read_size; i += 4) {
+//        classes[i/4] = static_cast<unsigned int>((int_buffer[i] << 24) | (int_buffer[i + 1] << 16) | (int_buffer[i + 2] << 8) | int_buffer[i + 3]);
+//    }
+    class_offset += ifs.gcount();
+    read_count += ifs.gcount();
+    ifs.seekg(feature_offset, std::istream::beg);
+    if (ifs.read((char *) features, buffer_samples * (total_number_of_features+1) * sizeof(float))) {
+        return -1;
+    }
+    feature_offset += ifs.gcount();
+    read_count += ifs.gcount();
+    /*
     class_offset += ifs.gcount();
     read_count += ifs.gcount();
     // read the features
     ifs.seekg(feature_offset, std::istream::beg);
-    if (!ifs.read(in_buffer, std::min(sizeof(in_buffer), max_samples*number_of_features* sizeof(float)))) {
+    if (!ifs.read(float_buffer, std::min(sizeof(float_buffer), max_samples*total_number_of_features* sizeof(float)))) {
+        std::copy(int_buffer, int_buffer+ifs.gcount(), classes);
         return false;
     }
     feature_offset += ifs.gcount();
     read_count += ifs.gcount();
+     */
 
 
 
+//    read_callback(classes, fea)
+    remaining_samples -= buffer_samples;
     ifs.close();
-    delete[] features;
-    delete[] classes;
-    return true;
+
+//    delete[] int_buffer;
+//    delete[] float_buffer;
+
+    return read_count;
 }
 
 //        double a[9] = { 1, 2, 3, 4, 5, 6, 7, 8, 9};
