@@ -15,8 +15,8 @@
 
 void perform_unit_tests() {
     std::cout << "***Unit Test Suite of NextSVM IO***" << std::endl;
-    char *in_file = const_cast<char *>("..\\input\\small_test_sparse.txt");
-    char *out_file = const_cast<char *>("..\\output\\out.bin");
+    auto *in_file = const_cast<char *>("..\\input\\small_test_sparse.txt");
+    auto *out_file = const_cast<char *>("..\\output\\out.bin");
     // 1
     do_unit_test(const_cast<char *>("1. Testing file size"), [&in_file]() {
         return get_file_size(in_file) == 350617;
@@ -25,7 +25,7 @@ void perform_unit_tests() {
     do_unit_test(const_cast<char *>("2. Testing svm_light to bin conversion"), [&in_file, &out_file]() {
         bool r = false;
         if (!convert_light_to_bin(in_file, out_file, [&r](int total_samples, int no_of_features, int zero_features) {
-            r = total_samples == 1000 && no_of_features == 29 && zero_features == 5;
+            r = total_samples == 1000 && no_of_features == 30 && zero_features == 5;
         })) {}
         return r;
     });
@@ -40,10 +40,10 @@ void perform_unit_tests() {
         is.seekg(sizeof(int)*(total_samples+1), std::istream::beg);
         is.read((char*)&class_sample_2,sizeof(int));
         is.read((char*)&feature_sample_1,sizeof(float));
-        is.seekg(-sizeof(float), std::istream::end);
+        is.seekg(-1*sizeof(float), std::istream::end);
         is.read((char*)&feature_sample_2,sizeof(float));
         is.close();
-        return max_features == 29 && total_samples == 1000 && class_sample_1 == 54 && class_sample_2 == 52
+        return max_features == 30 && total_samples == 1000 && class_sample_1 == 54 && class_sample_2 == 52
         && fabs(feature_sample_1 - 0.693624) < 0.0001 && fabs(feature_sample_2 -0.466426) < 0.0001;
     });
 }
