@@ -9,104 +9,70 @@
 #include <functional>
 #include <cstring>
 #include <iomanip>
+#include <cmath>
+#include "next_svm_io.h"
+#include "test_util.h"
 
-
-void parse_svm_light_data(std::ifstream &is, const std::function<void(int, int, float*)> &f1) {
-
-    std::string line;
-    int c, i, m = 0;
-    float f;
-    float sample_features[256];
-
-    is.clear();
-    is.seekg (0, std::ifstream::beg);
-    while (std::getline(is, line)) {
-        memset(sample_features, 0, sizeof(sample_features));
-        std::istringstream iss(line);
-        // class
-        iss >> c;
-        while (!iss.eof()) {
-            iss >> i;
-            // index starts at 1, we therefore decrement by one
-            i--;
-            if (i > m) m = i;
-            iss.ignore(2, ':');
-            iss >> f;
-            sample_features[i] = f;
-        }
-        f1(m, c, sample_features);
-    }
+void perform_unit_tests() {
+    std::cout << "***Unit Test Suite of NextSVM IO***" << std::endl;
+    auto *in_file = const_cast<char *>("..\\input\\small_test_sparse.txt");
+    auto *out_file = const_cast<char *>("..\\output\\out.bin");
+    // 1
+    do_unit_test(const_cast<char *>("1. Testing file size"), [&in_file]() {
+        return get_file_size(in_file) == 350617;
+    });
+    // 2
+    do_unit_test(const_cast<char *>("2. Testing svm_light to bin conversion"), [&in_file, &out_file]() {
+        bool r = false;
+        if (!convert_light_to_bin(in_file, out_file, [&r](int total_samples, int no_of_features, int zero_features) {
+            r = total_samples == 1000 && no_of_features == 30 && zero_features == 5;
+        })) {}
+        return r;
+    });
+    // 3
+    do_unit_test(const_cast<char *>("3. Confirming bin file"), [&out_file]() {
+        int max_features, total_samples, class_sample_1, class_sample_2;
+        float feature_sample_1, feature_sample_2;
+        std::ifstream is(out_file, std::ios::in | std::ifstream::binary);
+        is.read((char*)&total_samples,sizeof(int));
+        is.read((char*)&max_features,sizeof(int));
+        is.read((char*)&class_sample_1,sizeof(int));
+        is.seekg(sizeof(int)*(total_samples+1), std::istream::beg);
+        is.read((char*)&class_sample_2,sizeof(int));
+        is.read((char*)&feature_sample_1,sizeof(float));
+        is.seekg(-1*sizeof(float), std::istream::end);
+        is.read((char*)&feature_sample_2,sizeof(float));
+        is.close();
+        return max_features == 30 && total_samples == 1000 && class_sample_1 == 54 && class_sample_2 == 52
+        && fabs(feature_sample_1 - 0.693624) < 0.0001 && fabs(feature_sample_2 -0.466426) < 0.0001;
+    });
 }
 
-
-std::streampos fileSize( const char* filePath ){
-
-    std::streampos fsize = 0;
-    std::ifstream file( filePath, std::ios::in | std::ios::binary );
-
-    fsize = file.tellg();
-    file.seekg(0, std::ios::end );
-    fsize = file.tellg() - fsize;
-    file.close();
-
-    return fsize;
-}
-
-
-int main(int argc, char** argv) {
-
-    if (argc != 3) {
-        std::cout << "Wrong number of arguments, should be 2" << std::endl << "1: The input file to process"
-                  << std::endl << "2: The Output file" << std::endl;
-        return -1;
-    }
-
-    char* in_file = argv[1];
-    char* out_file = argv[2];
-    std::vector<float *> features;
-    std::vector<int> classes;
-    int max_features = 0;
-    int total_samples = 0;
-    int zero_features = 0;
-
-    std::cout << "Parsing size: " << fileSize(in_file) << std::endl;
-    std::ifstream infile(in_file, std::ios::in | std::ifstream::binary);
-    std::ofstream outfile(out_file, std::ios::in | std::ofstream::binary);
-    if (infile.is_open() && outfile.is_open()) {
-
-        std::cout << "Parsing the features" << std::endl;
-        parse_svm_light_data(infile, [&max_features](int m, int c, float* f) ->
-        void {
-            if (m > max_features) max_features = m;
-        });
-        std::cout << "Max feature length: " << max_features << std::endl;
-        parse_svm_light_data(infile, [max_features, &total_samples, &zero_features](int m, int c, const float* f) ->
-        void {
-            total_samples++;
-            for (int i = 0; i < max_features; i++) {
-                if (f[i] == 0)
-                    zero_features++;
-            }
-
-        });
-        std::cout << "Sparsity ratio: " << std::fixed << std::setprecision(4) <<
-            ((double)zero_features / (double)(total_samples * max_features)) * 100 << "%" << std::endl;
-        outfile.write(reinterpret_cast<const char *>(&total_samples), sizeof(int));
-        outfile.write(reinterpret_cast<const char *>(&max_features), sizeof(int));
-        parse_svm_light_data(infile, [max_features, &outfile](int m, int c, const float* f) ->
-        void {
-            outfile.write(reinterpret_cast<const char *>(&c), sizeof(int));
-            for (int i = 0; i < max_features; i++) {
-                outfile.write(reinterpret_cast<const char *>(&i), sizeof(int));
-                outfile.write(reinterpret_cast<const char *>(&f[i]), sizeof(float));
-            }
-            outfile << std::endl;
-        });
-        outfile.flush();
-        outfile.close();
-        infile.close();
-    } else {
+void light_to_bin(char *in_file, char *out_file) {
+    std::cout << "Parsing file size: " << get_file_size(in_file) << std::endl;
+    if (!convert_light_to_bin(in_file, out_file, [](int total_samples, int no_of_features, int zero_features) -> void {
+        double sparsity = ((double) zero_features / (double) (total_samples * no_of_features));
+        std::cout << "Number of samples: " << total_samples << std::endl;
+        std::cout << "Number of features: " << no_of_features << std::endl;
+        std::cout << "Total Empty features: " << zero_features << std::endl;
+        std::cout << "Sparsity ratio: " << std::fixed << std::setprecision(4) << sparsity * 100 << "%"
+                  << std::endl;
+    })) {
         std::cout << "Unable to open input or output files: " << in_file << ", " << out_file << std::endl;
+    }
+}
+
+int main(int argc, char **argv) {
+    if (argc == 1) {
+        perform_unit_tests();
+    } else if (argc == 3) {
+        char *in_file = argv[1];
+        char *out_file = argv[2];
+        light_to_bin(in_file, out_file);
+    } else {
+        std::cout << "Wrong number of arguments, should be 2 (or 0 for unit testing)" << std::endl <<
+                  "1: The input file to process" << std::endl << "2: The Output file" << std::endl;
+        return -1;
     }
     return 0;
 }
