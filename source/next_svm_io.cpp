@@ -6,6 +6,7 @@
 #include <sstream>
 #include <fstream>
 #include <iostream>
+#include <vector>
 #include "next_svm_io.h"
 
 int get_part_size(const int part_index, const int number_of_samples, const int number_of_parts) {

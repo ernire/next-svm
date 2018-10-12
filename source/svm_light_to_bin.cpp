@@ -15,8 +15,14 @@
 
 void perform_unit_tests() {
     std::cout << "***Unit Test Suite of NextSVM IO***" << std::endl;
-    auto *in_file = const_cast<char *>("..\\input\\small_test_sparse.txt");
-    auto *out_file = const_cast<char *>("..\\output\\out.bin");
+    char *in_file, *out_file;
+    #ifdef _WIN32
+        in_file = const_cast<char *>("..\\input\\small_test_sparse.txt");
+        out_file = const_cast<char *>("..\\output\\out.bin");
+    #else
+        in_file = const_cast<char *>("../input/small_test_sparse.txt");
+        out_file = const_cast<char *>("../output/out.bin");
+    #endif
     // 1
     do_unit_test(const_cast<char *>("1. Testing file size"), [&in_file]() {
         return get_file_size(in_file) == 350617;

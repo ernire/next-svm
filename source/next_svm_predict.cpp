@@ -9,7 +9,12 @@
 #include "test_util.h"
 
 void perform_io_unit_tests() {
-    auto *in_file = const_cast<char *>("..\\output\\out.bin");
+    char *in_file;
+    #ifdef _WIN32
+        in_file = const_cast<char *>("..\\output\\out.bin");
+    #else
+        in_file = const_cast<char *>("../output/out.bin");
+    #endif
     // 1
     do_unit_test(const_cast<char *>("1. Testing file read I"), [&in_file]() {
         bool r = true;
