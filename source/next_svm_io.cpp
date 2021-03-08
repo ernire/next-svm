@@ -30,9 +30,9 @@ int get_block_start_offset(const int part_index, const int number_of_samples, co
 // Single thread assumed
 void parse_svm_light_data(std::istream &is, const std::function<void(int, int, float *)> &sample_callback) {
     std::string line;
-    int c, i, m = 0;
+    int c, i, m = 2;
     float f;
-    float sample_features[512];
+    float sample_features[3];
 
     is.clear();
     is.seekg(0, std::istream::beg);
@@ -40,16 +40,21 @@ void parse_svm_light_data(std::istream &is, const std::function<void(int, int, f
         memset(sample_features, 0, sizeof(sample_features));
         std::istringstream iss(line);
         // class
+        for (i = 0; i < 3; ++i) {
+            iss >> sample_features[i];
+        }
+        /*
         iss >> c;
         while (!iss.eof()) {
             iss >> i;
             // index starts at 1, therefore we decrement by one
-            i--;
+//            i--;
             if (i > m) m = i;
-            iss.ignore(2, ':');
-            iss >> f;
+//            iss.ignore(2, ':');
+//            iss >> f;
             sample_features[i] = f;
         }
+         */
         sample_callback(m+1, c, sample_features);
     }
 }
@@ -78,9 +83,11 @@ bool convert_light_to_bin(char *in_file, char *out_file, const std::function<voi
     if (!is.is_open() || !os.is_open()) {
         return false;
     }
+    std::cout << "files created" << std::endl;
     parse_svm_light_data(is, [&max_features](int m, int c, float *f) -> void {
         if (m > max_features) max_features = m;
     });
+    std::cout << "max features: " << max_features << std::endl;
     parse_svm_light_data(is, [max_features, &total_samples, &zero_features](int m, int c, const float *f) -> void {
         total_samples++;
         for (int i = 0; i < max_features; i++) {
@@ -88,13 +95,14 @@ bool convert_light_to_bin(char *in_file, char *out_file, const std::function<voi
                 zero_features++;
         }
     });
+    std::cout << "Total samples: " << total_samples << std::endl;
     // callback the number of features and the data sparsity
     meta_callback(total_samples, max_features, zero_features);
     os.write(reinterpret_cast<const char *>(&total_samples), sizeof(int));
     os.write(reinterpret_cast<const char *>(&max_features), sizeof(int));
-    parse_svm_light_data(is, [max_features, &os](int m, int c, const float *f) -> void {
-        os.write(reinterpret_cast<const char *>(&c), sizeof(int));
-    });
+//    parse_svm_light_data(is, [max_features, &os](int m, int c, const float *f) -> void {
+//        os.write(reinterpret_cast<const char *>(&c), sizeof(int));
+//    });
     parse_svm_light_data(is, [max_features, &os](int m, int c, const float *f) -> void {
         for (int i = 0; i < max_features; i++) {
             os.write(reinterpret_cast<const char *>(&f[i]), sizeof(float));

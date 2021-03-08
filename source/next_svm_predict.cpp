@@ -7,6 +7,7 @@
 #include "next_svm_predict.h"
 #include "next_svm_io.h"
 #include "test_util.h"
+#include "pisvm.h"
 
 void perform_io_unit_tests() {
     char *in_file;
@@ -91,21 +92,108 @@ void perform_unit_tests() {
     perform_io_unit_tests();
 }
 
-int get_read_size(const int total_samples, const int total_readers, const int rank) {
-    int part = (total_samples / total_readers);
-    int reserve = total_samples % total_readers;
-    // Some processes will need one more sample if the data size does not fit completely with the number of processes
-    if (reserve > 0 && reserve < rank - 1) {
-        return part + 1;
+/*
+ *  int i;
+      int nr_class = model->nr_class;
+      int l = model->l;
+
+      double *kvalue = Malloc(double,l);
+      for(i=0;i<l;i++)
+	kvalue[i] = Kernel::k_function(x, nz_x, lx,
+				       model->SV[i], model->nz_sv[i],
+				       model->sv_len[i], model->param);
+
+      int *start = Malloc(int,nr_class);
+      start[0] = 0;
+      for(i=1;i<nr_class;i++)
+	start[i] = start[i-1]+model->nSV[i-1];
+
+      int p=0;
+      int pos=0;
+      for(i=0;i<nr_class;i++)
+	for(int j=i+1;j<nr_class;j++)
+	  {
+	    double sum = 0;
+	    int si = start[i];
+	    int sj = start[j];
+	    int ci = model->nSV[i];
+	    int cj = model->nSV[j];
+
+	    int k;
+	    double *coef1 = model->sv_coef[j-1];
+	    double *coef2 = model->sv_coef[i];
+	    for(k=0;k<ci;k++)
+	      sum += coef1[si+k] * kvalue[si+k];
+	    for(k=0;k<cj;k++)
+	      sum += coef2[sj+k] * kvalue[sj+k];
+	    sum -= model->rho[p++];
+	    dec_values[pos++] = sum;
+	  }
+
+      free(kvalue);
+      free(start);
     }
-    return part;
+ */
+
+/*
+ * 	return exp(-param.gamma*(
+				 dot(x, nz_x, lx, x, nz_x, lx)+
+				 dot(y, nz_y, ly, y, nz_y, ly)-
+				 2*dot(x, nz_x, lx, y, nz_y, ly)));
+
+double Kernel::dot(const Xfloat *x, const int *nz_x, const int lx,
+		   const Xfloat *y, const int *nz_y, const int ly)
+{
+  register double sum = 0;
+  register int i = 0;
+  register int j = 0;
+  while(i < lx && j < ly)
+    {
+      if(nz_x[i] == nz_y[j])
+	{
+	  sum += x[i] * y[j];
+	  ++i; ++j;
+	}
+      else if(nz_x[i] > nz_y[j])
+	++j;
+      else if(nz_x[i] < nz_y[j])
+	++i;
+    }
+  return sum;
+}
+ */
+
+inline double dot() {
+
 }
 
-next_svm_data load_samples(std::istream &is, const int total_readers, const int rank) {
-    int max_features, total_samples;
+void kernel_rbf() {
+    /*
+    return exp(-param.gamma*(
+            dot(x, nz_x, lx, x, nz_x, lx)+
+            dot(y, nz_y, ly, y, nz_y, ly)-
+            2*dot(x, nz_x, lx, y, nz_y, ly)));
+            */
+}
 
-    is.read((char *) &total_samples, sizeof(int));
-    is.read((char *) &max_features, sizeof(int));
+
+void next_svm_predict(svm_model *model, next_svm_data *data) {
+    int no_of_classes = model->nr_class;
+    // support vectors
+    int svs = model->l;
+
+    auto *kvalue = new double[svs];
+/*
+ * kvalue[i] = Kernel::k_function(x, nz_x, lx,
+				       model->SV[i], model->nz_sv[i],
+				       model->sv_len[i], model->param);
+ */
+
+    for(int i = 0; i < svs; i++) {
+
+    }
+
+    delete[] kvalue;
 }
 
 int main(int argc, char **argv) {
@@ -113,15 +201,27 @@ int main(int argc, char **argv) {
     if (argc == 1) {
         perform_unit_tests();
         return 0;
-    } else if (argc != 2) {
-        std::cout << "Wrong number of arguments, should be 2" << std::endl;
+    } else if (argc != 3) {
+        std::cout << "Wrong number of arguments, should be 3: [model file] [test file]" << std::endl;
         return -1;
     }
 
-    auto *in_file = argv[1];
-    std::ifstream infile(in_file, std::ios::in | std::ifstream::binary);
-
-    if (infile.is_open()) {
-        load_samples(infile, 1, 0);
-    }
+    auto *model_file = argv[1];
+    auto *test_file = argv[2];
+    svm_model *model = svm_load_model(model_file);
+    std::cout << "***MODEL INFO***" << std::endl;
+    std::cout << "Cache size: " << model->param.cache_size << std::endl;
+    std::cout << "degree: " << model->param.degree << std::endl;
+    std::cout << "gamma: " << model->param.gamma << std::endl;
+    std::cout << "coef0: " << model->param.coef0 << std::endl;
+    std::cout << "C: " << model->param.C << std::endl;
+    std::cout << "svm_type " << model->param.svm_type<< std::endl;
+    std::cout << "kernel_type " << model->param.kernel_type<< std::endl;
+    std::cout << "number of classes: " << model->nr_class << std::endl;
+    std::cout << "number of SVs: " << model->l << std::endl;
+    std::cout << "***" << std::endl;
+    auto *data = new next_svm_data(test_file, 1, 0, 10000);
+    int read_bytes = data->read_next_samples();
+    std::cout << "read test data bytes: " << read_bytes << std::endl;
+    next_svm_predict(model, data);
 }
