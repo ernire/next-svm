@@ -22,6 +22,14 @@ using d_vec = std::vector<T>;
 #include "magma_mpi.h"
 #include "magma_util.h"
 
+#ifdef OMP_ON
+#include "magma_exa_omp.h"
+#elif CUDA_ON
+#include "magma_exa_cu.h"
+#else
+#include "magma_exa.h"
+#endif
+
 class next_svm {
 private:
     int const sample_size = 1000000;
@@ -39,14 +47,13 @@ public:
     d_vec<int> v_y;
     explicit next_svm(h_vec<float> &v_x, h_vec<int> &v_y, const int m, const int n, const float c, const float l)
             : v_x(std::move(v_x)), v_y(std::move(v_y)), m(m), n(n), c(c), l(l) {
-        v_alpha.resize(m, 0);
         v_x_chunk.resize(m * n);
         v_y_chunk.resize(m);
     }
 
-    bool next_data(magmaMPI mpi);
+    bool next_data(magmaMPI mpi) noexcept;
 
-    void process_data(magmaMPI mpi);
+    void process_data(magmaMPI mpi) noexcept;
 
 };
 
