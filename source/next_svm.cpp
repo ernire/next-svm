@@ -203,15 +203,15 @@ void next_svm::process_data(magmaMPI mpi) noexcept {
             });
             float _alpha_diff = _alpha_new[max_j] - _alpha[max_j];
             if ((_alpha_diff < 0 && _alpha_diff <= l) || (_alpha_diff > 0 && _alpha_diff >= l)) {
-                std::cout << "checkpoint i: " << i << " j: " << max_j << std::endl;
+//                std::cout << "checkpoint i: " << i << " j: " << max_j << std::endl;
                 is_running = true;
-                std::cout << "i: " << i << " selected j: " << max_j << " with " << _alpha_new[max_j] << " cmp: " << _alpha[max_j] << std::endl;
+//                std::cout << "i: " << i << " selected j: " << max_j << " with " << _alpha_new[max_j] << " cmp: " << _alpha[max_j] << std::endl;
                 // update other alpha and calculate new b
                 auto _alpha_i_old = _alpha[i];
                 _alpha[i] += static_cast<float>(_y_c[max_j]) * static_cast<float>(_y_c[i]) *
                              (_alpha[max_j] - _alpha_new[max_j]);
-                std::cout << "_alpha i old: " << _alpha_i_old << " new: " << _alpha[i] << std::endl;
-                std::cout << "old b: " << _b << std::endl;
+//                std::cout << "_alpha i old: " << _alpha_i_old << " new: " << _alpha[i] << std::endl;
+//                std::cout << "old b: " << _b << std::endl;
                 if (0 < _alpha[i] && c > _alpha[i]) {
                     _b = _b - Ei - _y_c[i] * (_alpha[i] - _alpha_i_old) * _ii_jj[i] -
                          _y_c[max_j] * (_alpha[max_j] - _alpha_new[max_j]) * _ij[max_j];
@@ -224,7 +224,7 @@ void next_svm::process_data(magmaMPI mpi) noexcept {
                           (_b - (_fx[max_j] + _b - _y_c[max_j]) - _y_c[i] * (_alpha[i] - _alpha_i_old) * _ij[max_j] -
                            _y_c[max_j] * (_alpha[max_j] - _alpha_new[max_j]) * _ii_jj[max_j])) / 2;
                 }
-                std::cout << "new b: " << _b << std::endl;
+//                std::cout << "new b: " << _b << std::endl;
 
                 // update fx table by removing old and replacing it with new ai and aj
 
@@ -255,13 +255,13 @@ void next_svm::process_data(magmaMPI mpi) noexcept {
                 if (mpi.n_nodes > 1)
                     mpi.allGather(v_fx);
 #endif
-                std::cout << "_alpha j old: " << _alpha[max_j] << " new: " << _alpha_new[max_j] << std::endl;
+//                std::cout << "_alpha j old: " << _alpha[max_j] << " new: " << _alpha_new[max_j] << std::endl;
                 _alpha[max_j] = _alpha_new[max_j];
             }
         } // for loop over i
     }
     std::cout << "b: " << _b << std::endl;
-    magma_util::print_v("alpha: ", &v_alpha[0], v_alpha.size());
+//    magma_util::print_v("alpha: ", &v_alpha[0], v_alpha.size());
 }
 
 /*
