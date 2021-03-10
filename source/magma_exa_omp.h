@@ -374,6 +374,20 @@ namespace exa {
         exa::copy_if(v_input, 1, v_input.size(), v_output, 1, functor);
     }
 
+    template <typename T, typename F, typename std::enable_if<std::is_arithmetic<T>::value>::type* = nullptr>
+    std::size_t max_element(d_vec<T> const v, std::size_t const begin, std::size_t const end, F const &functor) noexcept {
+        return std::max_element(std::next(v.begin(), begin), std::next(v.begin(), end), functor) - v.begin();
+        /*
+        T val = std::numeric_limits<T>::min();
+        #pragma omp parallel for reduction(max: val)
+        for (std::size_t i = begin; i < end; ++i) {
+            if (functor(v[i]) > val)
+               val = v[i];
+        }
+        return val;
+         */
+    }
+
     template <typename T1, typename T2, typename F, typename std::enable_if<std::is_arithmetic<T1>::value>::type* = nullptr>
     void transform(d_vec<T1> const &v_input, std::size_t const in_begin, std::size_t const in_end, d_vec<T2> &v_output,
             std::size_t const out_begin, F const &functor) noexcept {

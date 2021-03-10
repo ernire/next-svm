@@ -32,7 +32,7 @@ using d_vec = std::vector<T>;
 
 class next_svm {
 private:
-    int const sample_size = 1000000;
+    int sample_size = 1000000;
     int transmit_cnt = 0;
 
 

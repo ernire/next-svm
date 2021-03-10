@@ -5,6 +5,9 @@
 #include "next_svm.h"
 
 bool next_svm::next_data(magmaMPI mpi) noexcept{
+    if (sample_size % mpi.n_nodes != 0) {
+        sample_size += sample_size % mpi.n_nodes;
+    }
     int node_transmit_size = magma_util::get_block_size(mpi.rank, sample_size, mpi.n_nodes);
     int node_transmit_offset = magma_util::get_block_offset(mpi.rank, sample_size, mpi.n_nodes);
     if (transmit_cnt >= m) {
@@ -20,6 +23,9 @@ bool next_svm::next_data(magmaMPI mpi) noexcept{
                 v_x_chunk, node_transmit_offset * n);
     } else {
         std::size_t size = m - transmit_cnt;
+        if (size % mpi.n_nodes != 0) {
+            size += size % mpi.n_nodes;
+        }
         exa::copy(v_y, transmit_cnt, transmit_cnt + size,
                 v_y_chunk, node_transmit_offset);
         exa::copy(v_x, transmit_cnt * n,
@@ -39,7 +45,6 @@ bool next_svm::next_data(magmaMPI mpi) noexcept{
 void next_svm::process_data(magmaMPI mpi) noexcept {
     v_alpha.resize(v_y_chunk.size(), 0);
     auto const _alpha = v_alpha.begin();
-//    auto const _x = v_x_chunk.begin();
     auto const _x_c = v_x_chunk.begin();
     auto const _y_c = v_y_chunk.begin();
     auto const _m = m;
@@ -56,11 +61,18 @@ void next_svm::process_data(magmaMPI mpi) noexcept {
 
     auto offset = magma_util::get_block_offset(mpi.rank, static_cast<int>(v_y_chunk.size()), mpi.n_nodes);
     auto size = magma_util::get_block_size(mpi.rank, static_cast<int>(v_y_chunk.size()), mpi.n_nodes);
+#ifdef DEBUG_ON
+    if (v_y_chunk.size() % mpi.n_nodes != 0) {
+        std::cerr << "CRITICAL ERROR, UNEVEN NODE DATA PARTITIONS" << std::endl;
+        exit(-2);
+    }
+#endif
     d_vec<float> v_ii_jj(v_y_chunk.size(), 0);
     auto const _ii_jj = v_ii_jj.begin();
     d_vec<float> v_ij(size);
     auto const _ij = v_ij.begin();
-
+    d_vec<int> v_enum(v_y_chunk.size());
+    exa::iota(v_enum, 0, v_enum.size(), 0);
 
     exa::for_each(offset, offset + size, [=]
 #ifdef CUDA_ON
@@ -77,9 +89,10 @@ void next_svm::process_data(magmaMPI mpi) noexcept {
         }
         _fx[i] = fxi;
     });
+
 #ifdef MPI_ON
     if (mpi.n_nodes > 1)
-        mpi.allReduce(v_fxi, magmaMPI::sum);
+        mpi.allGather(v_fx);
 #endif
     exa::for_each(offset, offset + size, [=]
 #ifdef CUDA_ON
@@ -97,64 +110,127 @@ void next_svm::process_data(magmaMPI mpi) noexcept {
         mpi.allReduce(v_ii_jj, magmaMPI::sum);
 #endif
 
-    for (std::size_t i = 0; i < v_y_chunk.size(); ++i) {
-        float Ei = _fx[i] + _b - _y_c[i];
-        if (!((_y_c[i] * Ei < -_l && _alpha[i] < _c) || (_y_c[i] * Ei > _l && _alpha[i] > 0))) {
-            continue;
-        }
-        exa::for_each(offset, offset + size, [=]
+    bool is_running = true;
+    int n_iter = 0;
+    while (is_running) {
+        std::cout << "iter: " << ++n_iter << std::endl;
+        is_running = false;
+        // TODO add passes
+        for (std::size_t i = 0; i < v_y_chunk.size(); ++i) {
+            float Ei = _fx[i] + _b - _y_c[i];
+            if (!((_y_c[i] * Ei < -_l && _alpha[i] < _c) || (_y_c[i] * Ei > _l && _alpha[i] > 0))) {
+                continue;
+            }
+            exa::for_each(offset, offset + size, [=]
 #ifdef CUDA_ON
-        __device__
+                    __device__
 #endif
-        (auto const &j) -> void {
-            float val = 0;
-            for (int k = 0; k < _n; ++k) {
-                val += _x_c[i * _n + k] * _x_c[j * _n + k];
-            }
-            _ij[j - offset] = val;
-        });
-        exa::fill(v_alpha_new, offset, offset + size, static_cast<float>(0));
-        exa::for_each(offset, offset + size, [=]
+                    (auto const &j) -> void {
+                float val = 0;
+                for (int k = 0; k < _n; ++k) {
+                    val += _x_c[i * _n + k] * _x_c[j * _n + k];
+                }
+                _ij[j - offset] = val;
+            });
+
+            exa::fill(v_alpha_new, 0, v_alpha_new.size(), static_cast<float>(0));
+            exa::for_each(offset, offset + size, [=]
 #ifdef CUDA_ON
-        __device__
+                    __device__
 #endif
-        (auto const &j) -> void {
-            if (i == j)
-                return;
-            float L, H;
-            if (_y_c[i] != _y_c[j]) {
-                L = _alpha[j] - _alpha[i] <= 0 ? 0 : _alpha[j] - _alpha[i];
-                H = c + _alpha[j] - _alpha[i] > c ? c : c + _alpha[j] - _alpha[i];
-            } else {
-                L = _alpha[j] + _alpha[i] - c <= 0 ? 0 : _alpha[j] + _alpha[i] - c;
-                H = _alpha[j] + _alpha[i] > c ? c : _alpha[j] + _alpha[i];
-            }
-            if (L == H)
-                return;
-            float eta = 2 * _ij[j - offset] - _ii_jj[i] - _ii_jj[j];
-            if (eta >= 0)
-                return;
-            auto Ej = _fx[j] + _b - _y_c[j];
-            float _alpha_mod = _alpha[j] - _y_c[j] * (Ei - Ej) / eta;
-            // clip
-            if (_alpha_mod > H) {
-                _alpha_mod = H;
-            } else if (L > _alpha_mod) {
-                _alpha_mod = L;
-            }
-            if ((_alpha_mod < 0 && _alpha_mod <= l) || (_alpha_mod > 0 && _alpha_mod >= l)) {
-                _alpha_new[j] = _alpha_mod;
-            }
-        });
+                    (auto const &j) -> void {
+                if (i == j)
+                    return;
+                float L, H;
+                if (_y_c[i] != _y_c[j]) {
+                    L = _alpha[j] - _alpha[i] <= 0 ? 0 : _alpha[j] - _alpha[i];
+                    H = c + _alpha[j] - _alpha[i] > c ? c : c + _alpha[j] - _alpha[i];
+                } else {
+                    L = _alpha[j] + _alpha[i] - c <= 0 ? 0 : _alpha[j] + _alpha[i] - c;
+                    H = _alpha[j] + _alpha[i] > c ? c : _alpha[j] + _alpha[i];
+                }
+                if (L == H)
+                    return;
+                float eta = 2 * _ij[j - offset] - _ii_jj[i] - _ii_jj[j];
+                if (eta >= 0)
+                    return;
+                auto Ej = _fx[j] + _b - _y_c[j];
+                float _new_alpha = _alpha[j] - (_y_c[j] * (Ei - Ej) / eta);
+                // clip
+                if (_new_alpha > H) {
+                    _new_alpha = H;
+                } else if (L > _new_alpha) {
+                    _new_alpha = L;
+                }
+                float _alpha_diff = _new_alpha - _alpha[j];
+                if ((_alpha_diff < 0 && _alpha_diff <= l) || (_alpha_diff > 0 && _alpha_diff >= l)) {
+                    _alpha_new[j] = _new_alpha;
+                }
+            });
 
-        // find best local alpha
-        // mpi> collect all best alphas and select
-//#ifdef MPI_ON
-//        if (mpi.n_nodes > 1)
-//        mpi.allReduce(v_alpha_new, magmaMPI::sum);
-//#endif
+#ifdef MPI_ON
+            if (mpi.n_nodes > 1)
+            mpi.allReduce(v_alpha_new, magmaMPI::sum);
+#endif
+            // find best alpha
+//            magma_util::print_v("_alpha_new: ", &v_alpha_new[0], v_alpha_new.size());
+//            magma_util::print_v("_alpha: ", &v_alpha[0], v_alpha.size());
+            auto max_j = exa::max_element(v_enum, 0, v_enum.size(), [=]
+#ifdef CUDA_ON
+                    __device__
+#endif
+                    (auto const &i, auto const &j) -> bool {
+                float val1 = _alpha_new[i] - _alpha[i];
+                float val2 = _alpha_new[j] - _alpha[j];
+                return val1 < val2;
+            });
+            float _alpha_diff = _alpha_new[max_j] - _alpha[max_j];
+            if ((_alpha_diff < 0 && _alpha_diff <= l) || (_alpha_diff > 0 && _alpha_diff >= l)) {
+                is_running = true;
+//                std::cout << "i: " << i << " selected j: " << max_j << " with " << _alpha_new[max_j] << std::endl;
+                // update other alpha and calculate new b
+                auto _alpha_i_old = _alpha[i];
+                _alpha[i] += static_cast<float>(_y_c[max_j]) * static_cast<float>(_y_c[i]) *
+                             (_alpha[max_j] - _alpha_new[max_j]);
 
-    } // for loop over i
+                // update fx table by removing old and replacing it with new ai and aj
+                exa::for_each(offset, offset + size, [=]
+#ifdef CUDA_ON
+                __device__
+#endif
+                (auto const &ii) -> void {
+                    if (_y_c[ii] == _i_max)
+                        return;
+                    float fxi = _fx[ii];
+                    // remove the old and add the new
+                    for (int k = 0; k < _n; ++k) {
+                        fxi -= (_alpha[max_j] * _y_c[max_j]) * (_x_c[i * _n + k] * _x_c[max_j * _n + k]);
+                        fxi += (_alpha_new[max_j] * _y_c[max_j]) * (_x_c[i * _n + k] * _x_c[max_j * _n + k]);
+                    }
+                    _fx[i] = fxi;
+                });
+#ifdef MPI_ON
+                if (mpi.n_nodes > 1)
+                    mpi.allGather(v_fx);
+#endif
+//            float b1 = _b - Ei - _y_c[i] * (_alpha[i] - _alpha_i_old) * _ii_jj[i] - _y_c[max_j] * (_alpha[max_j] - _alpha_new[max_j]) * _ij[max_j];
+//            float b2 = _b - (_fx[max_j] + _b - _y_c[max_j]) - _y_c[i] * (_alpha[i] - _alpha_i_old) * _ij[max_j] - _y_c[max_j] * (_alpha[max_j] - _alpha_new[max_j]) * _ii_jj[max_j];
+                if (0 < _alpha[i] && c > _alpha[i]) {
+                    _b = _b - Ei - _y_c[i] * (_alpha[i] - _alpha_i_old) * _ii_jj[i] -
+                         _y_c[max_j] * (_alpha[max_j] - _alpha_new[max_j]) * _ij[max_j];
+                } else if (0 < _alpha[max_j] && c > _alpha[max_j]) {
+                    _b = _b - (_fx[max_j] + _b - _y_c[max_j]) - _y_c[i] * (_alpha[i] - _alpha_i_old) * _ij[max_j] -
+                         _y_c[max_j] * (_alpha[max_j] - _alpha_new[max_j]) * _ii_jj[max_j];
+                } else {
+                    _b = ((_b - Ei - _y_c[i] * (_alpha[i] - _alpha_i_old) * _ii_jj[i] -
+                           _y_c[max_j] * (_alpha[max_j] - _alpha_new[max_j]) * _ij[max_j]) +
+                          (_b - (_fx[max_j] + _b - _y_c[max_j]) - _y_c[i] * (_alpha[i] - _alpha_i_old) * _ij[max_j] -
+                           _y_c[max_j] * (_alpha[max_j] - _alpha_new[max_j]) * _ii_jj[max_j])) / 2;
+                }
+                _alpha[max_j] = _alpha_new[max_j];
+            }
+        } // for loop over i
+    }
 }
 
 /*
@@ -199,6 +275,7 @@ void next_svm::process_data(magmaMPI mpi) noexcept {
                            if eta >= 0:
                                   continue
                            # compute new value for alphas j
+//                           float _alpha_mod = _alpha[j] - _y_c[j] * (Ei - Ej) / eta;
                            alphas[j] -= Y[j]*(Ei - Ej)/eta
                            # clip new value for alphas j
                            alphas[j] = clipAlphasJ(alphas[j],H,L)
